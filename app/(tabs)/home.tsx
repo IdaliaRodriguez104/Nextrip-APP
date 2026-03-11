@@ -15,7 +15,7 @@ interface Place {
   description: string;
   img: any;
   type: string;
-  ranting: number;
+  rating: number;
 }
 export default function HomeScreen() {
   const [places, setPlaces] = useState<Place[]>([]);
@@ -78,7 +78,7 @@ export default function HomeScreen() {
                 color="#FFD700"
                 style={{ marginRight: 5 }}
               />
-              {Number(places.ranting)}
+              {Number(places.rating)}
             </ThemedText>
           </View>
       )) }
