@@ -7,14 +7,18 @@ import { useState } from "react";
 import { Animated } from "react-native";
 import { useRef } from "react";
 import { getDatabase, push, ref, set } from "firebase/database";
-
+import {getAuth} from "firebase/auth";
 import Svg, { Rect } from "react-native-svg";
 import { MaterialIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 
 
 export default function UserScreen() {
   //Variables
   const [open, setOpen] = useState(false);
+  const auth = getAuth();
+  const user = auth.currentUser;
+  const userId = user?.uid;
   //Variables para el modal de agregar categoria
   const [openSelect, setOpenSelect] = useState(false);
   //Animaciones para el modal
@@ -22,11 +26,12 @@ export default function UserScreen() {
   //Variables de la BD
   const [name, setName] = useState("");
   const [type, setType] = useState("");
-  const [descripcion, setDescripcion] = useState("");
+  const [description, setDescription] = useState("");
   const [ubication, setUbication] = useState("");
   const [image, setImage] = useState<String | null| any>(null);
+  const [Extraimage, setExtraImage] = useState<String | null| any[]|any>(null);
   //Tipos de categorias
-  const types = ["Selecciona una categoría", "Monumento","Histórico","Playa", "Montana", "Naturaleza","Restaurante", "Parque", "Museo", "Otro"];
+  const types = ["Selecciona una categoría", "Monumento","Histórico", "Sitio Arqueológico","Playa", "Montana", "Naturaleza","Restaurante", "Parque", "Museo", "Otro"];
   const [rating, setRating] = useState(0);
   //Animacion de las estrellas
   const scale = useRef(new Animated.Value(1)).current;
@@ -92,33 +97,96 @@ export default function UserScreen() {
     default:
       return "";
   }
+};  
+   //Función para subir em Cloudinary las imagenes: 
+  const uploadImageCloudinary = async (uri: any) => {
+  if (!uri) throw new Error("No hay URI de imagen.");
+
+  try {
+    const data = new FormData();
+
+    if (Platform.OS === "web") {
+      // En web convertimos la URL a blob/file
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // 'file' debe ser un File/Blob con nombre
+      // @ts-ignore
+      data.append("file", blob, "photo.jpg");
+    } else {
+      // En Android/iOS se manda con objeto que tiene uri, name, type
+      data.append("file", {
+        uri: uri,
+        type: "image/jpeg",
+        name: "photo.jpg",
+      } as any);
+    }
+
+    // upload_preset EXACTAMENTE como está en Cloudinary (case sensitive)
+    data.append("upload_preset", "Nextrip");
+
+    // opcional: cloud_name no es necesario en body si ya lo pones en la URL
+    const url = "https://api.cloudinary.com/v1_1/djmeu6v6q/image/upload";
+
+    const res = await fetch(url, {
+      method: "POST",
+      body: data,
+      // NO poner headers: { "Content-Type": "multipart/form-data" }
+    });
+    {/** */}
+    const result = await res.json();
+    //console.log("Cloudinary raw response:", result);
+
+    if (!res.ok) {
+      // lanzar con el mensaje que devuelva Cloudinary para depurar
+      const msg = result?.error?.message || JSON.stringify(result);
+      throw new Error("Cloudinary upload failed: " + msg);
+    }
+
+    return result.secure_url; // URL final
+  } catch (err: any) {
+    showMessage(err.message);
+    //console.error("uploadImageCloudinary error:", err);
+    throw err;
+  }
 };
 
   //Funcion para agregar lugar en la BD
   const addPlace = async () => {
     try {
+      if (!image){
+        showMessage("Debe subir una imagen");
+        return;
+      }
+      
+      const imageUri = await uploadImageCloudinary(image);
+      if (!imageUri){
+        showMessage("Error al subir la imagen");
+        return;
+      }
 
       const db = getDatabase();
-
       const newPlaceRef = push(ref(db, "places"));
+
       if (type === "Selecciona una categoría") {
         return showMessage("Selecciona una categoría");
       }
-      if (!name || !type || !descripcion || !ubication || !rating) {
+      if (!name || !type || !description || !ubication || !rating) {
         return showMessage("Todos los campos son obligatorios");
       }
       await set(newPlaceRef, {
         name,
         type,
-        descripcion,
+        description,
         ubication,
         rating,
-        image,
+        image: imageUri,
+        ownUid: userId,
       });
 
       setName("");
       setType("");
-      setDescripcion("");
+      setDescription("");
       setUbication("");
       setRating(0);
       setImage(null);
@@ -144,6 +212,19 @@ export default function UserScreen() {
 
   if (!result.canceled) {
     setImage(result.assets[0].uri);
+  }
+  };
+  const pickImageExtras = async () => {
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [4,3],
+    quality: 1,
+  });
+
+  if (!result.canceled) {
+    setExtraImage(result.assets[0].uri);
   }
   };
     return(
@@ -238,7 +319,7 @@ export default function UserScreen() {
               </View>
               <View >
                 <Text style={styles.label}>Descripcion *</Text>
-                <TextInput style={styles.inputDescription} value={descripcion} onChangeText={setDescripcion}  placeholderTextColor="#5c5b5b" multiline={true} numberOfLines={4} textAlignVertical="top" placeholder="Comparte tu experiencia, qué te gustó, consejos para otros viajeros..."/>
+                <TextInput style={styles.inputDescription} value={description} onChangeText={setDescription}  placeholderTextColor="#5c5b5b" multiline={true} numberOfLines={4} textAlignVertical="top" placeholder="Comparte tu experiencia, qué te gustó, consejos para otros viajeros..."/>
               </View>
               <View>
                 <Text style={styles.label}>Calificacion *</Text>
@@ -275,16 +356,8 @@ export default function UserScreen() {
                   <TextInput placeholder="Ciudad, Pais"style={styles.input} placeholderTextColor="#5c5b5b" underlineColorAndroid={"#8f101000"} value={ubication} onChangeText={setUbication} />
                 </View>
               </View>
-              
+              {/*
               <View style={styles.attach}>
-                <Image
-                  source={require("../../assets/images/attach_file_170dp_2B7FFF_FILL0_wght400_GRAD0_opsz48.png")}
-                  style={styles.inputIcon}
-                />
-              
-              <Pressable style={styles.button} onPress={pickImage}>
-                <Text>Adjuntar más imagenes (opcional)</Text>
-              </Pressable>
 
               {open && (
                 <Pressable style={styles.overlayFull} onPress={closeMenu}>
@@ -321,7 +394,8 @@ export default function UserScreen() {
                 
               </View>
               </View>
-              
+               */}
+            
             <Pressable style={styles.btnadd} onPress={addPlace}>
               <Text style={styles.txtBtnAdd}>Agregar</Text>
             </Pressable>
@@ -339,8 +413,13 @@ const styles = StyleSheet.create({
   padding: 12,
   borderRadius: 16,
   borderWidth: 1,
-  borderColor: "#ebe8e8",
-  marginBottom: "4%"
+  borderColor: "#ebe8e800",
+  marginBottom: "4%",
+  elevation: 5,
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 2,
   },
   pressableUpload:{
   justifyContent:"center",
@@ -447,8 +526,8 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   btnadd:{
-    marginTop: "5%",
-    marginBottom: "16%",
+    marginTop: "8%",
+    marginBottom: "4%",
     backgroundColor: "#297cff",
     borderRadius: 10,
     padding: 10,

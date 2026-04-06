@@ -106,8 +106,12 @@ const [city, setCity] = useState("");
         <TextInput placeholder="Ingresa tu correo electrónico" placeholderTextColor={'#6c7474'} secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} autoCapitalize="none" keyboardType="email-address" style={styles.input}/>
 
         <Text style={styles.TextInputs}>Fecha de nacimiento</Text>
-        <Pressable onPress={() => setShow(true)} style={{ borderWidth:1, borderColor:'#6c7474', borderRadius:10, padding:10}}> <Text>{date.toLocaleDateString()}</Text></Pressable> {show && ( <DateTimePicker value={date} mode="date" display="default" onChange={onChange} />)}
-        
+        <Pressable onPress={() => setShow(true)} style={{ borderWidth:1, borderColor:'#6c7474', borderRadius:10, padding:10}}> 
+        <Text>{date.toLocaleDateString()}</Text>
+        </Pressable> 
+        {show && (
+          <DateTimePicker value={date} mode="date" display="default" onChange={onChange}/>
+          )}
         <Text style={styles.TextInputs}>Ciudad de nacimiento</Text>
         <TextInput placeholder="Ingresa tu Ciudad de nacimiento" placeholderTextColor={'#6c7474'} value={placeBorn} onChangeText={setPlaceBorn} style={styles.input}/>
 
@@ -144,6 +148,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 15,
     padding: 30,
+    width: "100%"
   },
   Image: {
     backgroundColor: '#ffffff',

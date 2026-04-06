@@ -1,112 +1,249 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import * as Location from "expo-location";
+import { getAuth } from "firebase/auth";
+import { getDatabase, onValue, ref } from "firebase/database";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Platform, StyleSheet, Text, View } from "react-native";
+import MapView, { LatLng, Marker, Region } from "react-native-maps";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+interface FavoritePlace {
+  id: string;
+  name: string;
+  ubication: string;
+  latitude: number;
+  longitude: number;
+}
 
-export default function TabTwoScreen() {
+type Coords = {
+  latitude: number;
+  longitude: number;
+};
+
+const GOOGLE_MAPS_APIKEY = "AIzaSyB8519h_kvlK7sYDugPDKb9msvOGc5hoU4";
+
+const FALLBACK_REGION: Region = {
+  latitude: -9.2,
+  longitude: -75.0,
+  latitudeDelta: 12,
+  longitudeDelta: 12,
+};
+
+const COLORS = [
+  "#E53935",
+  "#1E88E5",
+  "#43A047",
+  "#FB8C00",
+  "#8E24AA",
+  "#00897B",
+  "#FDD835",
+];
+
+export default function App() {
+  const [placesMarker, setPlacesMarker] = useState<FavoritePlace[]>([]);
+  const [currentLocation, setCurrentLocation] = useState<Coords | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  const auth = getAuth();
+  const userId = auth.currentUser?.uid;
+
+  const mapRef = useRef<MapView | null>(null);
+  const didFitRef = useRef(false);
+
+  const showMessage = (msg: string) => {
+    Platform.OS === "web" ? alert(msg) : Alert.alert(msg);
+  };
+
+  const geocodePlace = async (place: string): Promise<Coords | null> => {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          place,
+        )}&key=${GOOGLE_MAPS_APIKEY}`,
+      );
+
+      const data = await response.json();
+
+      if (data.status === "OK" && data.results?.length) {
+        const location = data.results[0].geometry.location;
+        return {
+          latitude: location.lat,
+          longitude: location.lng,
+        };
+      }
+
+      console.log("Geocode error:", data.status);
+      return null;
+    } catch (error) {
+      console.log("Geocode fetch error:", error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+    let alive = true;
+
+    const startLocationTracking = async () => {
+      try {
+        if (Platform.OS === "web") return;
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          showMessage("Necesitas permiso de ubicación para ver tu posición.");
+          return;
+        }
+
+        const lastLocation = await Location.getLastKnownPositionAsync({});
+        if (alive && lastLocation) {
+          setCurrentLocation({
+            latitude: lastLocation.coords.latitude,
+            longitude: lastLocation.coords.longitude,
+          });
+        }
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 3000000,
+            distanceInterval: 10,
+          },
+          (location) => {
+            if (!alive) return;
+
+            const next = {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            };
+
+            setCurrentLocation(next);
+          },
+        );
+      } catch (error) {
+        showMessage(String(error));
+      }
+    };
+
+    startLocationTracking();
+
+    return () => {
+      alive = false;
+      subscription?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const db = getDatabase();
+    const favRef = ref(db, `/favorites/${userId}`);
+
+    const unsubscribe = onValue(favRef, async (snapshot) => {
+      const data = snapshot.val();
+
+      if (!data) {
+        setPlacesMarker([]);
+        return;
+      }
+
+      const favorites = Object.entries(data) as [string, any][];
+
+      const enriched = await Promise.all(
+        favorites.map(async ([id, place]) => {
+          const query = `${place.name}, ${place.ubication}`;
+          const coords = await geocodePlace(query);
+
+          if (!coords) return null;
+
+          return {
+            id,
+            name: place.name ?? "",
+            ubication: place.ubication ?? "",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          };
+        }),
+      );
+
+      setPlacesMarker(enriched.filter(Boolean) as FavoritePlace[]);
+    });
+
+    return () => unsubscribe();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (placesMarker.length === 0) return;
+    if (didFitRef.current) return;
+
+    const coordinates = [
+      ...placesMarker.map((place) => ({
+        latitude: place.latitude,
+        longitude: place.longitude,
+      })),
+      ...(currentLocation ? [currentLocation] : []), // optional
+    ];
+
+    if (coordinates.length === 0) return;
+
+    mapRef.current?.fitToCoordinates(coordinates, {
+      edgePadding: {
+        top: 120,
+        right: 80,
+        bottom: 180,
+        left: 80,
+      },
+      animated: true,
+    });
+
+    didFitRef.current = true;
+  }, [mapReady, placesMarker, currentLocation]);
+
+  if (Platform.OS === "web") {
+    return (
+      <View>
+        <Text>Mapa no disponible en web</Text>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={FALLBACK_REGION}
+        onMapReady={() => setMapReady(true)}
+      >
+        {currentLocation && (
+          <Marker
+            coordinate={currentLocation as LatLng}
+            title="Mi ubicación"
+            description="Ubicación actual"
+            pinColor="#0000FF"
+          />
+        )}
+
+        {placesMarker.map((place, index) => (
+          <Marker
+            key={place.id}
+            coordinate={{
+              latitude: place.latitude,
+              longitude: place.longitude,
+            }}
+            title={place.name}
+            description={place.ubication}
+            pinColor={COLORS[index % COLORS.length]}
+          />
+        ))}
+      </MapView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
+  map: {
+    flex: 1,
   },
 });

@@ -5,7 +5,7 @@ import { HapticTab } from "@/components/haptic-tab";
 
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-
+import AnimatedTabIcon from "@/components/AnimatedTabIcon";
 import { View, StyleSheet, } from "react-native";
 
 export default function TabLayout() {
@@ -13,57 +13,69 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}
+    screenOptions={{
+      tabBarActiveTintColor: "#297cff",   // color cuando está seleccionado
+      tabBarInactiveTintColor: "#999",    // color cuando NO está seleccionado
+      headerShown: false,
+      tabBarButton: HapticTab,
+    }}
     >
       <Tabs.Screen
         name="home"
         options={{
           title: "Inicio",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="home" size={28} color={color} />
-          ),
+          tabBarIcon: (props) => (
+            <AnimatedTabIcon focused={props.focused}>
+              <MaterialIcons name="home" size={28} color={props.color} />
+            </AnimatedTabIcon>
+          )
         }}
       />
+
       <Tabs.Screen
         name="explore"
         options={{
           title: "Mapa",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="map" size={28} color={color} />
-          ),
+          tabBarIcon: (props) => (
+            <AnimatedTabIcon focused={props.focused}>
+              <MaterialIcons name="map" size={28} color={props.color} />
+            </AnimatedTabIcon>
+          )
         }}
       />
       <Tabs.Screen
         name="more"
         options={{
           title: "",
-          tabBarIcon: () => (
-            <View style={styles.centerButton}>
-              <Ionicons name="add" size={28} color="white" />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused}>
+              <View style={styles.centerButton}>
+                <Ionicons name="add" size={28} color="white" />
+              </View>
+            </AnimatedTabIcon>
+          )
         }}
       />
       <Tabs.Screen
         name="favorites"
         options={{
           title: "Favoritos",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="favorite" size={24} color={color} />
-          ),
+          tabBarIcon: (props) => (
+            <AnimatedTabIcon focused={props.focused}>
+              <MaterialIcons name="favorite" size={28} color={props.color} />
+            </AnimatedTabIcon>
+          )
         }}
       />
       <Tabs.Screen
         name="user"
         options={{
           title: "Perfil",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="person" size={28} color={color} />
-          ),
+          tabBarIcon: (props) => (
+            <AnimatedTabIcon focused={props.focused}>
+              <MaterialIcons name="person" size={28} color={props.color} />
+            </AnimatedTabIcon>
+          )
         }}
       />
       
@@ -78,7 +90,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#297cff",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 25,
     shadowColor: "#000",
     shadowOpacity: 0.8,
     shadowRadius: 8,
